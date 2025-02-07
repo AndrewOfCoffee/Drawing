@@ -1,0 +1,284 @@
+﻿@page "/"
+@using Blazor.Extensions
+@using Blazor.Extensions.Canvas
+@using Blazor.Extensions.Canvas.Canvas2D
+@using System;
+@using System.Linq;
+@using System.Threading;
+@using Andrew_Conley_Vector_Program_4
+
+
+<PageTitle>Index</PageTitle>
+
+<h1>--Shape Drawing Program--</h1>
+
+Select you action on the tool box, then draw/change shapes inside the box.
+
+<p>Mouse Position: X = @MouseX, Y = @MouseY</p>
+<p>
+    OnMouseDown: @(MouseDown ? "True" : "False") &nbsp;&nbsp;&nbsp;&nbsp; Current Action: @CurrentAction
+</p>
+<div style="position: absolute; width: 100%; height: 90vh;">
+    <canvas @ref="_canvasRef" width="800" height="600"></canvas>
+    <BECanvas Height="600" Width="600" @ref="canvasRef"></BECanvas>
+
+</div>
+
+<div class ="row">
+    <div class="col-1">
+        Column 1
+    </div>
+    <div class ="col-11">
+        Column 2
+    </div>
+</div>
+
+    <div style="position: absolute; width: 100%; height: 90vh;">
+        <div style="position: absolute; top: 50px; left: 10px; z-index: 10;display: flex; flex-direction: column; gap: 5px;">
+            <button @onclick="() => { SelectTool(); ToggleTools(); }">Select</button>
+            @if (ToolsVisable)
+            {
+                <button @onclick="DeleteTool">Delete</button>
+                <button @onclick="ColorTool">Color</button>
+                <button @onclick="ResizeTool">Resize</button>
+                <button @onclick="ZReorderTool">Z-Order</button>
+                <button @onclick="LineTool">Line</button>
+                <button @onclick="RectTool">Rect</button>
+                <button @onclick="OvalTool">Oval</button>
+            }
+            else
+            {
+                <button @onclick="LineTool">&nbsp;&nbsp;Line&nbsp;&nbsp;</button>
+                <button @onclick="RectTool">&nbsp;&nbsp;Rect&nbsp;&nbsp;</button>
+                <button @onclick="OvalTool">&nbsp;&nbsp;Oval&nbsp;&nbsp;</button>
+            }
+        </div>
+
+        <div @onmousemove="UpdateMousePosition"
+             @onmousedown="OnMouseDown"
+             @onmouseup="OnMouseUp"
+             style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+        </div>
+    </div>
+
+    @code {
+
+        private ElementReference _canvasRef;
+        private Canvas2DContext? _context;
+        private bool ToolsVisable = false;
+
+        private double StartX, StartY, EndX, EndY;
+        private bool IsDrawing = false;
+
+
+
+        private void ToggleTools()
+        {
+            ToolsVisable = !ToolsVisable;
+        }
+
+
+        public double MouseX { get; set; }
+        public double MouseY { get; set; }
+        public bool MouseDown { get; set; } = false;
+        public string CurrentAction { get; set; }
+
+        public void UpdateMousePosition(MouseEventArgs e)
+        {
+            MouseX = e.PageX; //e.Client; is veiw oriented and would mess up project because, when webpage scrolling shapes will stay stationary to veiw
+            MouseY = e.PageY; //Page will make shapes scroll with the page
+        }
+
+        public void OnMouseDown(MouseEventArgs e)
+        {
+            MouseDown = true;
+            if (CurrentAction == "RectTool" && !IsDrawing && _context is not null)
+            {
+                StartX = e.PageX;
+                StartY = e.PageY;
+                IsDrawing = true;
+            }
+        }
+
+        public async Task OnMouseUp(MouseEventArgs e)
+        {
+            MouseDown = false;
+            if (CurrentAction == "RectTool" && IsDrawing && _context is not null)
+            {
+                EndX = e.PageX;
+                EndY = e.PageY;
+                IsDrawing = false;
+
+                double width = Math.Abs(EndX - StartX);
+                double height = Math.Abs(EndY - StartY);
+                double rectX = Math.Min(StartX, EndX);
+                double rectY = Math.Min(StartY, EndY);
+
+                await _context.SetFillStyleAsync("blue");
+                await _context.FillRectAsync(rectX, rectY, width, height);
+            }
+        }
+
+        BECanvasComponent canvasRef;
+        Canvas2DContext context;
+        System.Threading.Timer timer;
+
+        /*
+        //variables for number of shapes, so that they can make loop to make random kiddo classes
+        int numSquares = 5;
+        int numCircles = 5;
+        */
+
+
+        //list storeing all shapes
+        List<Shape> shapes = new List<Shape>();
+
+        protected override async Task OnAfterRenderAsync(bool firstRender)
+        {
+            if (firstRender)
+            {
+                context = await canvasRef.CreateCanvas2DAsync(); // Also initialize context for BECanvasComponent
+
+                InitializeShapes();
+                timer = new System.Threading.Timer(OnTick, null, 0, 5);
+            }
+        }
+
+        /*
+        //timer updating canvas, the tick calls the (update volocity, update position by volocity, erase board, draw board)
+        protected override async Task OnAfterRenderAsync(bool firstRender)
+        {
+            context = await canvasRef.CreateCanvas2DAsync();
+
+            //initialize meathod(set up random/positions, velocities, then create(run path)) for shapes only on first render                (sounds very mincrafty lol)
+            if (firstRender)
+            {
+                InitializeShapes();
+            }
+            //makes tick/timer for updates to work on (time in ms)
+            timer = new System.Threading.Timer(OnTick, null, 0, 5);
+        }
+        */
+
+        //initialize meathod for shapes getting random positions and velocities on first render                                      (I know I said that earlyer, but it can be usful if only reading this part)
+        //needed to set a bunch of randomized shapes, then let shapes be in other code to work
+        private void InitializeShapes()
+        {
+
+            //create squares for how many squares set in numSquares verable (polymorphism?)
+
+            shapes.Add(new Square
+            {
+                x = 10,
+                y = 10,
+                w = 50,
+                h = 50
+            });
+
+
+            //same as squares for circles
+            //create circles for how many circles set in numCircles verable (polymorphism?)
+
+
+            shapes.Add(new Circle
+            {
+                x = 10,
+                y = 10,
+                w = 50,
+                h = 50
+            });
+
+        }
+
+        //called every #ms to update the canvas
+        protected async void OnTick(object? obj)
+        {
+            //BeginBatchAsync is blazor meathod in canvas2d putting all paths in one
+            await context.BeginBatchAsync();
+            //clear screen
+            await context.ClearRectAsync(0, 0, 600, 600);
+
+            //update and draw shapes
+            foreach (var shape in shapes)
+            {
+                shape.Draw(context);
+            }
+
+            //draw border
+            await context.SetStrokeStyleAsync("black");
+            await context.StrokeRectAsync(0, 0, 800, 600);
+            //end path
+            await context.EndBatchAsync();
+        }
+
+        //parent of all shapes so they instantiate the same verables(which they make their own random numbers for)
+        //only uses parent values from the w & h
+        //parent has moving and bouncing meathods in them
+        //kiddo classes only draw their shape
+        public class Shape
+        {
+            public double x { get; set; }
+            public double y { get; set; }
+            public double w { get; set; }
+            public double h { get; set; }
+
+            //draw the shape(then eventully overridden by kiddo classes)
+            public virtual Task Draw(Canvas2DContext context) => Task.CompletedTask;
+        }
+
+        //square kiddo so that it takes parent values and uses them to make a square
+        //remeber that the paths are put together as one, cause BeginBatchAsync
+        public class Square : Shape
+        {
+            public override async Task Draw(Canvas2DContext context)
+            {
+                await context.FillRectAsync(x, y, w, h);
+            }
+        }
+
+        //same for circle
+        //circle kiddo so that it takes parent values and uses them to make a circle
+        //remeber that the paths are put together as one, cause BeginBatchAsync
+        public class Circle : Shape
+        {
+            public override async Task Draw(Canvas2DContext context)
+            {
+                await context.BeginPathAsync();
+                await context.ArcAsync(x + w / 2, y + h / 2, w / 2, 0, Math.PI * 2);  // Draw circle
+                await context.FillAsync();  // Fill circle with current fill style
+            }
+        }
+        public void SelectTool()
+        {
+            CurrentAction = ("SelectTool");
+        }
+        public void DeleteTool()
+        {
+            CurrentAction = ("DeleteTool");
+        }
+
+        public void ColorTool()
+        {
+            CurrentAction = ("ColorTool");
+        }
+        public void ResizeTool()
+        {
+            CurrentAction = ("ResizeTool");
+        }
+        public void ZReorderTool()
+        {
+            CurrentAction = ("ZReorderTool");
+        }
+        public void LineTool()
+        {
+            CurrentAction = ("LineTool");
+        }
+        public void RectTool()
+        {
+            CurrentAction = ("RectTool");
+        }
+        public void OvalTool()
+        {
+            CurrentAction = ("OvalTool");
+        }
+    }
